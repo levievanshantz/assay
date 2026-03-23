@@ -1,5 +1,6 @@
 import { query } from "./db";
 import { supersedeClaimsForSource } from "./ingestionPipeline";
+import { embedTexts, getEmbeddingInfo } from "./embeddings";
 
 // ─── Types ──────────────────────────────────────────────────────
 export type ClaimLayer = "observation" | "interpretation" | "intention";
@@ -85,7 +86,7 @@ const DEFAULT_LAYER_WEIGHTS: Record<QueryMode, Record<ClaimLayer, number>> = {
 // ─── Claim Extraction (via Claude) — V3.1 Prompt ────────────────
 // Full V3.1 prompt lives in .claude/agents/claim-extractor-v3.md
 // This is the inline version for programmatic extraction via Anthropic SDK
-const EXTRACTION_PROMPT = `You are a claim extractor for Intelligence Ledger. Claims are POINTERS in semantic space — standalone vector embeddings whose purpose is to pull parent evidence records into retrieval via RRF. No PM ever reads a claim directly.
+const EXTRACTION_PROMPT = `You are a claim extractor for Assay. Claims are POINTERS in semantic space — standalone vector embeddings whose purpose is to pull parent evidence records into retrieval via RRF. No PM ever reads a claim directly.
 
 CORE TEST: Does this claim's embedding vector point in a meaningfully different direction than the embedding of the full source text? If yes, extract it. If no, skip it.
 
@@ -159,45 +160,11 @@ export async function extractClaims(
   }
 }
 
-// ─── Embedding (via OpenAI) ─────────────────────────────────────
-export async function embedTexts(
-  texts: string[]
-): Promise<number[][]> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) throw new Error("OPENAI_API_KEY not configured");
-
-  // Batch in groups of 100 (OpenAI limit is 2048 but we stay conservative)
-  const batchSize = 100;
-  const allEmbeddings: number[][] = [];
-
-  for (let i = 0; i < texts.length; i += batchSize) {
-    const batch = texts.slice(i, i + batchSize);
-    const response = await fetch("https://api.openai.com/v1/embeddings", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "text-embedding-3-small",
-        input: batch,
-      }),
-    });
-
-    if (!response.ok) {
-      const err = await response.text();
-      throw new Error(`OpenAI embedding failed: ${response.status} ${err}`);
-    }
-
-    const data = await response.json();
-    const embeddings = data.data
-      .sort((a: { index: number }, b: { index: number }) => a.index - b.index)
-      .map((d: { embedding: number[] }) => d.embedding);
-    allEmbeddings.push(...embeddings);
-  }
-
-  return allEmbeddings;
-}
+// ─── Embedding ──────────────────────────────────────────────────
+// Re-exported from embeddings.ts — supports OpenAI (default) and
+// local ONNX provider (bge-large-en-v1.5, optimized for Apple Silicon).
+// Set EMBEDDING_PROVIDER=local in .env.local to use local embeddings.
+export { embedTexts, getEmbeddingInfo } from "./embeddings";
 
 // ─── Claim CRUD ─────────────────────────────────────────────────
 export async function saveClaims(

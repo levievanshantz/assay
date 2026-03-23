@@ -14,6 +14,7 @@ import { fileURLToPath } from "url";
 export interface AssayConfig {
   sync: { enabled: boolean };
   extraction: { enabled: boolean; mode: "ollama" | "anthropic" | "subagent" };
+  embedding: { provider: "openai" | "local" };
   accumulation: { enabled: boolean };
   hygiene: { schedule: string }; // cron expression or "off"
 }
@@ -23,6 +24,7 @@ export interface AssayConfig {
 export const DEFAULT_CONFIG: AssayConfig = {
   sync: { enabled: true },
   extraction: { enabled: true, mode: "ollama" },
+  embedding: { provider: "openai" },
   accumulation: { enabled: true },
   hygiene: { schedule: "off" },
 };
@@ -81,6 +83,7 @@ export function loadConfig(): AssayConfig {
     const merged = deepClone(DEFAULT_CONFIG);
     if (parsed.sync) Object.assign(merged.sync, parsed.sync);
     if (parsed.extraction) Object.assign(merged.extraction, parsed.extraction);
+    if (parsed.embedding) Object.assign(merged.embedding, parsed.embedding);
     if (parsed.accumulation) Object.assign(merged.accumulation, parsed.accumulation);
     if (parsed.hygiene) Object.assign(merged.hygiene, parsed.hygiene);
     return merged;
