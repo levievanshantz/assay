@@ -1,4 +1,4 @@
-# /stress-test — Stress test a proposal against the Intelligence Ledger corpus
+# /stress-test — Stress test a proposal against the Assay corpus
 
 Stress test the user's proposal against organizational evidence. This is deliberate judgment mode — find weaknesses, overlaps, conflicts, and gaps.
 

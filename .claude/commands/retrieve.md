@@ -1,4 +1,4 @@
-# /retrieve — Raw evidence retrieval from the Intelligence Ledger
+# /retrieve — Raw evidence retrieval from the Assay corpus
 
 Retrieve evidence sections from the corpus. No evaluation, no judgment — just the evidence.
 

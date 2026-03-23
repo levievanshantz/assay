@@ -1,4 +1,4 @@
-# /sync-status — Check Intelligence Ledger corpus health
+# /sync-status — Check Assay corpus health
 
 Show the current state of the Notion sync pipeline and corpus health.
 
