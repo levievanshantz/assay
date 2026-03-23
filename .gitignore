@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.env
+.env.local
+.env*.local
+.DS_Store
+**/.DS_Store
+scripts/output/
+*.tmp
+.assay.config.json
+
+# Log files (keep logs/.gitkeep)
+logs/*.log
+logs/*.jsonl

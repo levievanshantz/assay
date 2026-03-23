@@ -1,0 +1,35 @@
+{
+  "name": "assay",
+  "version": "0.1.0",
+  "description": "Give your product team a memory that doesn't forget. MCP server for institutional knowledge retrieval.",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsup src/index.ts --out-dir dist --format esm --platform node --no-splitting",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "setup-db": "node scripts/setup-db.mjs",
+    "verify": "node scripts/verify-setup.mjs",
+    "seed-demo": "node scripts/seed-demo.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.80.0",
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "dotenv": "^16.4.7",
+    "openai": "^4.77.0",
+    "pg": "^8.13.1",
+    "uuid": "^11.0.3",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/pg": "^8.11.10",
+    "@types/uuid": "^10.0.0",
+    "tsup": "^8.5.1",
+    "tsx": "^4.19.3",
+    "typescript": "^5.7.3"
+  },
+  "author": "Assaylabs",
+  "license": "MIT"
+}
