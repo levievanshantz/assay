@@ -301,10 +301,10 @@ export async function processSourceClaims(opts: {
   // 2. Embed all claim texts in one batch
   const embeddings = await embedTexts(extracted.map((c) => c.claim_text));
 
-  // 2.5. Cosine distance gate (V3.1 contract: 0.10 hard drop)
+  // 2.5. Cosine distance gate (V3.1 contract: 0.05 hard drop)
   // Drop claims whose embedding is too close to the source evidence record's embedding.
   // These claims add zero retrieval value — pgvector already finds the chunk.
-  const COSINE_DISTANCE_GATE = 0.10;
+  const COSINE_DISTANCE_GATE = 0.05;
   let filteredExtracted = extracted;
   let filteredEmbeddings = embeddings;
 
