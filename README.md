@@ -24,7 +24,7 @@ Assay is an MCP server that gives AI coding agents persistent institutional know
 ## Quick Start
 
 ```bash
-git clone https://github.com/assaylabs/assay.git
+git clone https://github.com/levievanshantz/assay.git
 cd assay
 npm install
 cp .env.local.example .env.local    # fill in your API keys
@@ -112,7 +112,7 @@ node scripts/assay-config.mjs extraction.mode anthropic
 | `stress_test` | Test a proposal against organizational evidence | `proposal`, `product_id` |
 | `retrieve_evidence` | Search the evidence corpus | `query_text`, `mode` (raw/guided/evaluate), `top_k` |
 | `ingest_from_notion` | Ingest a Notion page by URL or ID | `page_url_or_id`, `extract_claims`, `product_id` |
-| `sync_notion` | Sync all tracked Notion pages for changes | `extract_claims`, `max_pages`, `product_id` |
+| `sync` | Sync all tracked Notion pages for changes | `extract_claims`, `max_pages`, `product_id` |
 | `drift_report` | Read-only health check on Notion page drift | `max_pages`, `product_id` |
 | `health_check` | Verify system connectivity and status | -- |
 | `submit_extracted_claims` | Deposit extracted claims back into the corpus | `claims`, `evidence_record_id` |
