@@ -612,11 +612,6 @@ export async function getEvidenceSourceGroups(): Promise<
   return results;
 }
 
-export async function deleteEvidence(id: string): Promise<boolean> {
-  const { rowCount } = await query("DELETE FROM evidence_records WHERE id = $1", [id]);
-  return (rowCount ?? 0) > 0;
-}
-
 export async function searchEvidence(
   productId: string | null,
   keywords: string[]

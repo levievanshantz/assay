@@ -1,5 +1,6 @@
 import type { ClaimExtractionResult } from "./claims";
 import { extractClaimsViaOllama } from "./ollamaClient";
+import { logger } from "./logger";
 
 // ─── Types ───────────────────────────────────────────────────────
 export type ExtractionMode = "ollama" | "anthropic" | "subagent";
@@ -8,7 +9,7 @@ export type ExtractionMode = "ollama" | "anthropic" | "subagent";
 export function getExtractionMode(): ExtractionMode {
   const mode = process.env.EXTRACTION_MODE || "ollama";
   if (!["ollama", "anthropic", "subagent"].includes(mode)) {
-    console.warn(`Unknown EXTRACTION_MODE "${mode}", falling back to ollama`);
+    logger.warn("extract", `Unknown EXTRACTION_MODE "${mode}", falling back to ollama`);
     return "ollama";
   }
   return mode as ExtractionMode;
@@ -48,9 +49,7 @@ export async function extractClaimsRouted(
       // Subagent mode is handled by the MCP tool flow.
       // The MCP server returns instructions for the calling agent to execute
       // extraction itself — no programmatic extraction happens here.
-      console.log(
-        "[extraction-router] subagent mode — extraction deferred to calling agent"
-      );
+      logger.info("extract", "subagent mode — extraction deferred to calling agent");
       return [];
 
     default:

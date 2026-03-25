@@ -117,33 +117,6 @@ export async function supersedeClaimsForSource(
   return rowCount ?? 0;
 }
 
-// ─── Source Version Tracking ────────────────────────────────────
-
-/**
- * Increment source_version on an evidence record.
- * Returns the new version number.
- */
-export async function incrementSourceVersion(
-  evidenceId: string
-): Promise<number> {
-  const { rows } = await query(
-    "SELECT source_version FROM evidence_records WHERE id = $1",
-    [evidenceId]
-  );
-  if (!rows[0]) {
-    throw new Error(`Failed to fetch source_version for ${evidenceId}`);
-  }
-
-  const newVersion = (rows[0].source_version ?? 1) + 1;
-
-  await query(
-    "UPDATE evidence_records SET source_version = $1 WHERE id = $2",
-    [newVersion, evidenceId]
-  );
-
-  return newVersion;
-}
-
 // ─── Ingestion Result Types ─────────────────────────────────────
 
 export interface IngestionResult {

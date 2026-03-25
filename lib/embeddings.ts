@@ -1,3 +1,5 @@
+import { logger } from "./logger";
+
 /**
  * Embedding provider abstraction — Assay
  *
@@ -107,15 +109,13 @@ const localProvider: EmbeddingProvider = {
 
     // Singleton pipeline — first call downloads + caches the model (~1.3GB)
     if (!localPipelineInstance) {
-      console.log(
-        `[embeddings] Loading local model ${localProvider.model} (first call downloads ~1.3GB)...`
-      );
+      logger.info("embeddings", `Loading local model ${localProvider.model} (first call downloads ~1.3GB)...`);
       localPipelineInstance = await pipeline(
         "feature-extraction",
         localProvider.model,
         { quantized: true } // Use quantized ONNX variant for speed on Apple Silicon
       );
-      console.log(`[embeddings] Local model loaded.`);
+      logger.info("embeddings", "Local model loaded.");
     }
 
     const allEmbeddings: number[][] = [];

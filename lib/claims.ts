@@ -1,6 +1,7 @@
 import { query } from "./db";
 import { supersedeClaimsForSource } from "./ingestionPipeline";
 import { embedTexts, getEmbeddingInfo } from "./embeddings";
+import { logger } from "./logger";
 
 // ─── Types ──────────────────────────────────────────────────────
 export type ClaimLayer = "observation" | "interpretation" | "intention";
@@ -155,7 +156,7 @@ export async function extractClaims(
       stance_signal: typeof c.stance_signal === "number" ? c.stance_signal : 0.3,
     }));
   } catch {
-    console.error("Failed to parse claim extraction:", textBlock.text);
+    logger.error("claims", "Failed to parse claim extraction", { response: textBlock.text });
     return [];
   }
 }
@@ -209,21 +210,6 @@ export async function getClaimsBySource(
     [sourceType, sourceId]
   );
   return rows;
-}
-
-export async function getClaimById(id: string): Promise<Claim | undefined> {
-  const { rows } = await query("SELECT * FROM claims WHERE id = $1", [id]);
-  return rows[0] ?? undefined;
-}
-
-export async function deleteClaimsBySource(
-  sourceType: string,
-  sourceId: string
-): Promise<void> {
-  await query(
-    "DELETE FROM claims WHERE source_type = $1 AND source_id = $2",
-    [sourceType, sourceId]
-  );
 }
 
 // ─── Dedup: check if claim is near-duplicate of existing ─────────
@@ -333,7 +319,7 @@ export async function processSourceClaims(opts: {
 
       if (keepIndices.length < extracted.length) {
         const dropped = extracted.length - keepIndices.length;
-        console.log(`[cosine-gate] Dropped ${dropped}/${extracted.length} claims (distance < ${COSINE_DISTANCE_GATE})`);
+        logger.info("claims", `[cosine-gate] Dropped ${dropped}/${extracted.length} claims (distance < ${COSINE_DISTANCE_GATE})`);
         filteredExtracted = keepIndices.map(i => extracted[i]);
         filteredEmbeddings = keepIndices.map(i => embeddings[i]);
       }

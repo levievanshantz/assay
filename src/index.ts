@@ -39,19 +39,20 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { evaluateProposal } from "../lib/evaluationCore.js";
 import { embedTexts, hybridClaimSearch, hybridEvidenceSearch, processSourceClaims, saveClaims } from "../lib/claims.js";
-import { getEvaluationWithMatches, createEvidence, embedEvidence } from "../lib/storage.js";
+import { createEvidence, embedEvidence } from "../lib/storage.js";
 import { sanitizeInput } from "../lib/sanitize.js";
 import { computeContentHash, checkDuplicate, emptyIngestionResult } from "../lib/ingestionPipeline.js";
 import { query } from "../lib/db.js";
 import type { IngestionResult } from "../lib/ingestionPipeline.js";
 import { syncAllNotionPages } from "../lib/notionSync.js";
 import {
-  fetchNotionBlocks as fetchNotionBlocksShared,
+  parseNotionPageId,
+  fetchNotionBlocks,
+  fetchNotionPageTitle,
   fetchNotionPageMeta,
-  blocksToText as blocksToTextShared,
-  chunkAtHeadings as chunkAtHeadingsShared,
+  blocksToText,
+  chunkAtHeadings,
 } from "../lib/notionClient.js";
 import { parseConfluencePageId, fetchConfluencePage } from "../lib/confluenceClient.js";
 import type { ConfluenceConfig } from "../lib/confluenceClient.js";
@@ -77,7 +78,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     {
       name: "retrieve_evidence",
       description:
-        "Search the Intelligence Ledger corpus. Three modes:\n" +
+        "Search the Assay evidence corpus. Three modes:\n" +
         "  • raw (default) — returns top-K evidence records with RRF scores. No LLM call.\n" +
         "  • guided — returns evidence + an eval_instructions field. " +
         "⚡ Smart: the calling LLM (you) processes the results itself — zero extra API cost, " +
@@ -165,7 +166,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       name: "check_proposal",
       description:
         "[DEPRECATED — use stress_test instead] " +
-        "Evaluate a product proposal against the Intelligence Ledger evidence corpus. " +
+        "Evaluate a product proposal against the Assay evidence corpus. " +
         "Routes to stress_test handler.",
       inputSchema: {
         type: "object" as const,
@@ -478,7 +479,7 @@ async function handleRetrieve(args: Record<string, unknown>) {
     // The server hands back data + a synthesis prompt; the caller does the thinking.
     if (mode === "guided") {
       payload._eval_instructions =
-        `You have retrieved ${results.length} evidence records from the Intelligence Ledger for the query: "${queryText}".\n\n` +
+        `You have retrieved ${results.length} evidence records from Assay for the query: "${queryText}".\n\n` +
         `Review the evidence array above and:\n` +
         `1. Assess whether the corpus contains a clear answer to the query.\n` +
         `2. Identify the 2–3 strongest relevant records (non-empty title + excerpt only) and explain why they're relevant.\n` +
@@ -642,274 +643,7 @@ async function handleStressTest(args: Record<string, unknown>) {
   }
 }
 
-// ─── check_proposal [DEPRECATED — routes to stress_test] ──────────
-
-async function handleEvaluate(args: Record<string, string>) {
-  try {
-    const proposal = sanitizeInput(args.proposal_text ?? "");
-    if (!proposal) {
-      return { content: [{ type: "text", text: "proposal_text is required." }], isError: true };
-    }
-
-    const title = sanitizeInput(args.title ?? "") || proposal.slice(0, 80).replace(/\n/g, " ");
-    const productId = args.product_id || process.env.PRODUCT_ID || undefined;
-
-    const result = await evaluateProposal({
-      title,
-      prd_body: proposal,
-      product_id: productId,
-      source: "mcp",
-    });
-
-    // Fetch enriched matches — joins evidence record fields (title, summary, source_ref)
-    // and claim fields (claim_layer, modality) onto each match
-    const enriched = await getEvaluationWithMatches(result.evaluation.result.id);
-    const matches = (enriched?.matches ?? result.evaluation.matches) as any[];
-
-    return {
-      content: [{ type: "text", text: formatEvalResponse(result, matches) }],
-    };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
-    return { content: [{ type: "text", text: `Evaluation failed: ${msg}` }], isError: true };
-  }
-}
-
-// ─── Response formatters ──────────────────────────────────────────
-
-function formatEvalResponse(
-  result: Awaited<ReturnType<typeof evaluateProposal>>,
-  matches: any[]
-): string {
-  const ev = result.evaluation.result;
-  const verdict = ev.verdict.charAt(0).toUpperCase() + ev.verdict.slice(1);
-
-  const evidence = matches.map((m) => {
-    // Post-PRD6: match resolves via claim → source_evidence
-    // Pre-PRD6:  match resolves directly via evidence record
-    const rec = m.evidence ?? m.claim?.source_evidence ?? null;
-    return {
-      title: rec?.title ?? "",
-      excerpt: rec?.summary ?? "",
-      source_url: rec?.source_ref ?? "",
-      claim_layer: m.claim?.claim_layer ?? null,
-      modality: m.claim?.modality ?? null,
-    };
-  });
-
-  return JSON.stringify({
-    verdict,
-    assessment: ev.statement,
-    rationale: ev.reason,
-    evidence,
-    mode_used: "test_evaluation",
-    methodology_version: String(ev.prompt_version ?? 1),
-  }, null, 2);
-}
-
 // ─── ingest_from_notion ───────────────────────────────────────────
-
-const CHUNK_CHAR_LIMIT = 12000;
-
-/** Extract 32-char hex page ID from a Notion URL or raw ID string. */
-function parseNotionPageId(input: string): string {
-  // Already a 32-char hex string
-  const bare = input.replace(/-/g, "");
-  if (/^[0-9a-f]{32}$/i.test(bare)) return bare;
-
-  // URL pattern: https://www.notion.so/workspace/Page-Title-<32hex>
-  // or https://www.notion.so/<32hex>
-  // or with query params like ?v=...
-  const match = input.match(/([0-9a-f]{32})/i);
-  if (match) return match[1];
-
-  throw new Error(
-    `Cannot extract Notion page ID from: ${input}. ` +
-    `Provide a 32-char hex ID or a Notion page URL.`
-  );
-}
-
-/** Fetch all child blocks for a Notion block, recursing into has_children blocks. */
-async function fetchNotionBlocks(blockId: string): Promise<any[]> {
-  const blocks: any[] = [];
-  let cursor: string | undefined;
-
-  do {
-    const url = new URL(`https://api.notion.com/v1/blocks/${blockId}/children`);
-    url.searchParams.set("page_size", "100");
-    if (cursor) url.searchParams.set("start_cursor", cursor);
-
-    const res = await fetch(url.toString(), {
-      headers: {
-        Authorization: `Bearer ${NOTION_API_KEY}`,
-        "Notion-Version": "2022-06-28",
-      },
-    });
-
-    if (!res.ok) {
-      const body = await res.text();
-      throw new Error(`Notion API error ${res.status}: ${body}`);
-    }
-
-    const json = await res.json() as { results: any[]; has_more: boolean; next_cursor: string | null };
-    for (const block of json.results) {
-      blocks.push(block);
-      if (block.has_children && !["child_page", "child_database"].includes(block.type)) {
-        const children = await fetchNotionBlocks(block.id);
-        block._children = children;
-      }
-    }
-
-    cursor = json.has_more ? (json.next_cursor ?? undefined) : undefined;
-  } while (cursor);
-
-  return blocks;
-}
-
-/** Fetch the page title from the Notion pages API. */
-async function fetchNotionPageTitle(pageId: string): Promise<string> {
-  const res = await fetch(`https://api.notion.com/v1/pages/${pageId}`, {
-    headers: {
-      Authorization: `Bearer ${NOTION_API_KEY}`,
-      "Notion-Version": "2022-06-28",
-    },
-  });
-
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Notion page fetch error ${res.status}: ${body}`);
-  }
-
-  const json = await res.json() as { properties: Record<string, any> };
-  // Title is usually in a property named "title" or "Name"
-  for (const prop of Object.values(json.properties)) {
-    if (prop.type === "title" && Array.isArray(prop.title)) {
-      return prop.title.map((t: any) => t.plain_text).join("") || "Untitled";
-    }
-  }
-  return "Untitled";
-}
-
-/** Extract plain text from a Notion rich_text array. */
-function richTextToPlain(richText: any[]): string {
-  if (!Array.isArray(richText)) return "";
-  return richText.map((t: any) => t.plain_text ?? "").join("");
-}
-
-/** Convert Notion blocks to plain text lines, recursing into children. */
-function blocksToText(blocks: any[], depth = 0): string[] {
-  const lines: string[] = [];
-  const indent = "  ".repeat(depth);
-
-  for (const block of blocks) {
-    const type = block.type;
-
-    switch (type) {
-      case "heading_1":
-        lines.push(`# ${richTextToPlain(block.heading_1?.rich_text)}`);
-        break;
-      case "heading_2":
-        lines.push(`## ${richTextToPlain(block.heading_2?.rich_text)}`);
-        break;
-      case "heading_3":
-        lines.push(`### ${richTextToPlain(block.heading_3?.rich_text)}`);
-        break;
-      case "paragraph":
-        lines.push(`${indent}${richTextToPlain(block.paragraph?.rich_text)}`);
-        break;
-      case "bulleted_list_item":
-        lines.push(`${indent}- ${richTextToPlain(block.bulleted_list_item?.rich_text)}`);
-        break;
-      case "numbered_list_item":
-        lines.push(`${indent}1. ${richTextToPlain(block.numbered_list_item?.rich_text)}`);
-        break;
-      case "to_do": {
-        const checked = block.to_do?.checked ? "x" : " ";
-        lines.push(`${indent}- [${checked}] ${richTextToPlain(block.to_do?.rich_text)}`);
-        break;
-      }
-      case "toggle":
-        lines.push(`${indent}${richTextToPlain(block.toggle?.rich_text)}`);
-        break;
-      case "quote":
-        lines.push(`${indent}> ${richTextToPlain(block.quote?.rich_text)}`);
-        break;
-      case "callout":
-        lines.push(`${indent}> ${richTextToPlain(block.callout?.rich_text)}`);
-        break;
-      case "code":
-        lines.push(`${indent}\`\`\`\n${indent}${richTextToPlain(block.code?.rich_text)}\n${indent}\`\`\``);
-        break;
-      case "divider":
-        lines.push("---");
-        break;
-      // Skip: image, video, file, embed, bookmark, table_of_contents, breadcrumb, child_page, child_database
-      default:
-        break;
-    }
-
-    // Recurse into nested children
-    if (block._children && block._children.length > 0) {
-      lines.push(...blocksToText(block._children, depth + 1));
-    }
-  }
-
-  return lines;
-}
-
-/** Split full text at H1/H2 boundaries into chunks. */
-function chunkAtHeadings(fullText: string, pageTitle: string): { title: string; text: string }[] {
-  const lines = fullText.split("\n");
-  const chunks: { title: string; text: string }[] = [];
-  let currentHeading = "";
-  let currentLines: string[] = [];
-
-  function flushChunk() {
-    const text = currentLines.join("\n").trim();
-    if (!text) return;
-
-    const title = currentHeading
-      ? `${pageTitle} — ${currentHeading}`
-      : pageTitle;
-
-    // If chunk exceeds limit, split further
-    if (text.length <= CHUNK_CHAR_LIMIT) {
-      chunks.push({ title, text });
-    } else {
-      // Sub-chunk large sections by character limit with paragraph breaks
-      let start = 0;
-      let subIndex = 0;
-      while (start < text.length) {
-        let end = start + CHUNK_CHAR_LIMIT;
-        if (end < text.length) {
-          const paraBreak = text.lastIndexOf("\n\n", end);
-          if (paraBreak > start + CHUNK_CHAR_LIMIT * 0.5) end = paraBreak;
-        }
-        const subText = text.slice(start, Math.min(end, text.length)).trim();
-        if (subText) {
-          const subTitle = subIndex === 0 ? title : `${title} (cont. ${subIndex + 1})`;
-          chunks.push({ title: subTitle, text: subText });
-          subIndex++;
-        }
-        start = end;
-      }
-    }
-  }
-
-  for (const line of lines) {
-    // H1 or H2 boundary
-    if (/^#{1,2}\s/.test(line)) {
-      flushChunk();
-      currentHeading = line.replace(/^#{1,2}\s+/, "").trim();
-      currentLines = [line];
-    } else {
-      currentLines.push(line);
-    }
-  }
-
-  flushChunk();
-  return chunks;
-}
 
 async function handleSyncNotion(args: Record<string, unknown>) {
   try {
@@ -1082,7 +816,7 @@ async function handleDriftReport(args: Record<string, unknown>) {
       let blocks: any[];
       try {
         await new Promise((resolve) => setTimeout(resolve, DRIFT_RATE_LIMIT_MS));
-        blocks = await fetchNotionBlocksShared(pageId, NOTION_API_KEY);
+        blocks = await fetchNotionBlocks(pageId, NOTION_API_KEY);
       } catch (err: any) {
         details.push({
           page_title: pageMeta.title,
@@ -1094,9 +828,9 @@ async function handleDriftReport(args: Record<string, unknown>) {
         continue;
       }
 
-      const textLines = blocksToTextShared(blocks);
+      const textLines = blocksToText(blocks);
       const fullText = textLines.join("\n");
-      const chunks = chunkAtHeadingsShared(fullText, pageMeta.title);
+      const chunks = chunkAtHeadings(fullText, pageMeta.title);
 
       // Build lookup maps
       const storedByHash = new Map<string, (typeof storedRecords)[0]>();
@@ -1324,8 +1058,8 @@ async function handleIngestFromNotion(args: Record<string, unknown>) {
 
     // 1. Fetch page title and blocks in parallel
     const [pageTitle, blocks] = await Promise.all([
-      fetchNotionPageTitle(pageId),
-      fetchNotionBlocks(pageId),
+      fetchNotionPageTitle(pageId, NOTION_API_KEY),
+      fetchNotionBlocks(pageId, NOTION_API_KEY),
     ]);
 
     // 2. Convert blocks to text
