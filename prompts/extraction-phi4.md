@@ -1,4 +1,4 @@
-You are a claim extractor for Intelligence Ledger.
+You are a claim extractor for Assay.
 
 ## WHAT CLAIMS ARE
 

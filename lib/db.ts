@@ -17,7 +17,7 @@ function getPool(): Pool {
     const connectionString = process.env.DATABASE_URL;
     if (!connectionString) {
       throw new Error(
-        "DATABASE_URL is not set. Add it to .env.local (e.g. postgresql://localhost:5432/intelligence_ledger_local)"
+        "DATABASE_URL is not set. Add it to .env.local (e.g. postgresql://localhost:5432/assay)"
       );
     }
     _pool = new Pool({

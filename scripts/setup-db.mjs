@@ -31,7 +31,7 @@ if (!DATABASE_URL) {
   console.error(
     "ERROR: DATABASE_URL is not set.\n" +
       "Add it to .env.local, e.g.:\n" +
-      "  DATABASE_URL=postgresql://localhost:5432/intelligence_ledger_local"
+      "  DATABASE_URL=postgresql://localhost:5432/assay"
   );
   process.exit(1);
 }
