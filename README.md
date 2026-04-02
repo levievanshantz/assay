@@ -60,7 +60,7 @@ Replace `/absolute/path/to/assay` with your actual install path. `ANTHROPIC_API_
 
 After configuring, restart Claude Code. Test with:
 
-> "Use the health_check tool to verify Assay is working."
+> "Use the configure tool with subcommand health to verify Assay is working."
 
 ---
 
@@ -104,19 +104,14 @@ node scripts/assay-config.mjs extraction.mode anthropic
 
 ---
 
-## MCP Tools Reference
+## MCP Tools Reference (4 tools)
 
 | Tool | Description | Key Parameters |
 |------|-------------|----------------|
-| `brief` | Get a briefing on what the org knows about a topic | `topic`, `depth` (quick/standard/deep), `product_id` |
-| `stress_test` | Test a proposal against organizational evidence | `proposal`, `product_id` |
-| `retrieve_evidence` | Search the evidence corpus | `query_text`, `mode` (raw/guided/evaluate), `top_k` |
-| `ingest_from_notion` | Ingest a Notion page by URL or ID | `page_url_or_id`, `extract_claims`, `product_id` |
-| `sync` | Sync all tracked Notion pages for changes | `extract_claims`, `max_pages`, `product_id` |
-| `drift_report` | Read-only health check on Notion page drift | `max_pages`, `product_id` |
-| `health_check` | Verify system connectivity and status | -- |
-| `submit_extracted_claims` | Deposit extracted claims back into the corpus | `claims`, `evidence_record_id` |
-| `check_proposal` | *(Deprecated)* Routes to `stress_test` | `proposal_text`, `title`, `product_id` |
+| `retrieve` | Search the evidence corpus. Four modes: `raw` (default, no LLM), `guided` (returns eval instructions for calling LLM), `evaluate` (server-side OpenAI synthesis), `brief` (organizational knowledge synthesis) | `query_text`, `mode`, `top_k`, `full_content`, `depth`, `product_id` |
+| `scan` | Fast pre-flight check against evidence. Returns 3-5 signals with clear/caution/blocker verdict. ~3-5s. | `intent`, `product_id` |
+| `stress_test` | Stress-test a proposal against evidence. Returns overlap/conflict analysis, assumption weaknesses, gaps, verdict, confidence. | `proposal`, `product_id` |
+| `configure` | Unified admin tool. Subcommands: `status` (sync health + optional drift), `sync` (trigger Notion sync), `sources` (connected sources + corpus stats), `search` (show/update retrieval settings), `extraction` (show/update model settings), `health` (system connectivity check) | `subcommand`, plus subcommand-specific params |
 
 ---
 

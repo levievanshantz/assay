@@ -22,20 +22,14 @@ This repo is the **MCP-only extraction** of `intelligence-ledger-prototype` (ILP
 - **Optional synthesis:** `@anthropic-ai/sdk` still present for evaluate mode (may be removed later)
 - **Validation:** Zod
 
-## MCP Tools (11 registered)
+## MCP Tools (4 registered — v2 surface)
 
 | Tool | Description |
 |------|-------------|
-| `retrieve_evidence` | Hybrid search (embedding + RRF). Three modes: `raw` (no LLM), `guided` (returns eval instructions for calling LLM), `evaluate` (server-side synthesis). |
-| `brief` | Briefing-first synthesis — surfaces what the org already knows about a topic. Context summary, prior work, constraints, debates, dependencies. No judgment. |
+| `retrieve` | Hybrid search (embedding + RRF). Four modes: `raw` (no LLM, default), `guided` (returns eval instructions for calling LLM), `evaluate` (server-side OpenAI synthesis), `brief` (organizational knowledge synthesis — context summary, prior work, constraints, debates, dependencies). |
+| `scan` | Fast pre-flight check. Returns 3-5 signals (blockers, cautions, support) with clear/caution/blocker verdict. Designed for one-sentence intents. ~3-5s response. |
 | `stress_test` | Deliberate judgment mode — stress-tests a proposal against evidence. Returns overlap/conflict analysis, assumption weaknesses, gaps, verdict, confidence. |
-| `check_proposal` | **DEPRECATED** — alias that routes to `stress_test`. |
-| `ingest_from_notion` | Fetches a Notion page, chunks at heading boundaries, embeds, and extracts claims. Content-hash dedup skips unchanged sections. |
-| `ingest_from_confluence` | Same as Notion ingestion but for Confluence (Cloud v2 ADF + Server/DC v1 storage format). |
-| `sync_notion` | Syncs all tracked Notion pages. Re-embeds + re-extracts changed sections. Circuit breaker halts if >20% of pages changed. |
-| `drift_report` | Read-only diagnostic — compares current Notion content against stored evidence using content hash + cosine similarity. No mutations. |
-| `health_check` | System health: DB connectivity, pgvector, embedding config, extraction mode, Notion integration, synthesis availability. |
-| `submit_extracted_claims` | Accepts externally extracted claims for an evidence record (subagent extraction mode). Validates, embeds, and saves. |
+| `configure` | Unified admin tool with subcommands: `status` (sync health + optional drift analysis), `sync` (trigger Notion workspace sync), `sources` (connected sources + corpus stats), `search` (show/update retrieval settings), `extraction` (show/update model settings), `health` (system connectivity check). |
 
 ## Database
 
