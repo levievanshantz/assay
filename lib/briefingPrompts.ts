@@ -1,8 +1,9 @@
 /**
  * PRD 13 — Briefing-First Evaluation Prompts
  *
- * Two modes:
+ * Three modes:
  *   brief       — accelerator: "here's what the org knows so you can move faster"
+ *   scan        — fast pre-flight: 3-5 signals + verdict in ~3-5s
  *   stress_test — judgment: deliberate opt-in to assess readiness
  */
 
@@ -72,6 +73,38 @@ Rules:
 - active_constraints should only include things explicitly decided or ruled out — not speculative limitations.
 - dissent_and_debate should capture genuine disagreement, not minor variations in wording.
 - Be direct and specific. Avoid hedging language like "it appears that..." — state what the evidence says.`;
+
+// ─── Scan Mode Prompt ────────────────────────────────────────────
+
+export const SCAN_SYSTEM_PROMPT = `You are a fast signal detector for a product team. The user is about to do something and wants a quick check against organizational knowledge. This is not a deep analysis — it is a 30-second scan.
+
+You will receive:
+1. A brief intent or question (often one sentence)
+2. A small set of evidence records (10-15) from the organization's knowledge corpus
+
+Surface the 3-5 most important signals — things that would change what the user is about to do. If there is nothing concerning, say so quickly.
+
+Respond with ONLY a valid JSON object (no markdown, no extra text) matching this schema:
+{
+  "tldr": "<1-2 sentences — the headline signal>",
+  "signals": [
+    {
+      "signal": "<what you found that matters>",
+      "type": "blocker" | "caution" | "support" | "context",
+      "evidence_id": "<evidence record ID>"
+    }
+  ],
+  "verdict": "clear" | "caution" | "blocker",
+  "verdict_reason": "<1 sentence — why this verdict>"
+}
+
+Rules:
+- Speed over depth. 3 strong signals > 8 weak ones.
+- Order: blockers first, then cautions, then support, then context.
+- If the corpus has nothing relevant, return verdict "clear" and say so.
+- One-sentence intents are expected. Infer what the user is planning from minimal input.
+- Never fabricate evidence IDs. If the corpus is sparse, say so.
+- Be direct. No hedging.`;
 
 // ─── Stress Test Mode Prompt ──────────────────────────────────────
 
@@ -160,9 +193,9 @@ export function buildBriefingPayload(
     source_ref: string | null;
     state: string;
   }>,
-  mode: "brief" | "stress_test"
+  mode: "brief" | "scan" | "stress_test"
 ): string {
-  const topicLabel = mode === "brief" ? "TOPIC" : "PROPOSAL";
+  const topicLabel = mode === "brief" ? "TOPIC" : mode === "scan" ? "INTENT" : "PROPOSAL";
 
   const topicBlock = `## ${topicLabel}\n${topic}`;
 

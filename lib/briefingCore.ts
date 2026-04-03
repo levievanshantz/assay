@@ -11,13 +11,14 @@ import type { ClaimSearchResult } from "./claims";
 import { query } from "./db";
 import {
   BRIEF_SYSTEM_PROMPT,
+  SCAN_SYSTEM_PROMPT,
   STRESS_TEST_SYSTEM_PROMPT,
   buildBriefingPayload,
 } from "./briefingPrompts";
 
 // ─── Types ───────────────────────────────────────────────────────
 
-export type BriefingMode = "brief" | "stress_test";
+export type BriefingMode = "brief" | "scan" | "stress_test";
 export type BriefDepth = "quick" | "standard" | "deep";
 
 export interface BriefingInput {
@@ -31,6 +32,16 @@ export interface BriefingInput {
 
 export interface BriefingResult {
   mode: BriefingMode;
+  systemPrompt: string;
+  userContent: string;
+  evidence: Array<{
+    id: string;
+    type: string;
+    title: string;
+    summary: string;
+    source_ref: string | null;
+    state: string;
+  }>;
   result: Record<string, unknown>;
   evidence_count: number;
   depth?: BriefDepth;
@@ -85,8 +96,7 @@ function tryParseJSON(text: string): unknown {
 export async function runBriefing(input: BriefingInput): Promise<BriefingResult> {
   const { text, mode, product_id } = input;
   const depth = input.depth ?? "standard";
-  const stressTestK = Number(process.env.STRESS_TEST_MAX_EVIDENCE) || 100;
-  const topK = mode === "brief" ? DEPTH_TO_TOP_K[depth] : stressTestK;
+  const topK = mode === "brief" ? DEPTH_TO_TOP_K[depth] : mode === "scan" ? 40 : 80;
 
   // ── 1. Embed query ──
   const queryEmbedding = await embedTexts([text]).then((r) => r[0]);
@@ -208,7 +218,7 @@ export async function runBriefing(input: BriefingInput): Promise<BriefingResult>
   }
 
   // ── 4. LLM synthesis ──
-  const systemPrompt = mode === "brief" ? BRIEF_SYSTEM_PROMPT : STRESS_TEST_SYSTEM_PROMPT;
+  const systemPrompt = mode === "brief" ? BRIEF_SYSTEM_PROMPT : mode === "scan" ? SCAN_SYSTEM_PROMPT : STRESS_TEST_SYSTEM_PROMPT;
   const userContent = buildBriefingPayload(text, allEvidence, mode);
 
   // Get provider settings for the LLM call
@@ -270,6 +280,9 @@ export async function runBriefing(input: BriefingInput): Promise<BriefingResult>
 
   return {
     mode,
+    systemPrompt,
+    userContent,
+    evidence: allEvidence,
     result: parsed as Record<string, unknown>,
     evidence_count: allEvidence.length,
     ...(mode === "brief" ? { depth } : {}),

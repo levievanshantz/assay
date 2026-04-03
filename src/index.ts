@@ -47,7 +47,12 @@ import {
   chunkAtHeadings,
 } from "../lib/notionClient.js";
 import { runBriefing } from "../lib/briefingCore.js";
-import type { BriefDepth } from "../lib/briefingCore.js";
+import type { BriefDepth, BriefingResult } from "../lib/briefingCore.js";
+import {
+  buildCitationMap,
+  buildRetrievalArtifact,
+  type RetrievalMeta,
+} from "../lib/formatOutput.js";
 import { loadConfig } from "../lib/config.js";
 import { logger, initSessionLog } from "../lib/logger.js";
 
@@ -443,6 +448,97 @@ async function handleRetrieve(args: Record<string, unknown>) {
   }
 }
 
+// ─── Multi-block response helpers ───────────────────────────────
+
+/**
+ * Build the retrieval artifact footer string from a BriefingResult.
+ */
+function buildRetrievalFooter(result: BriefingResult): string {
+  const evidence = result.evidence;
+  const evidenceRecords = evidence.map((e) => ({
+    id: e.id,
+    title: e.title,
+    source_ref: e.source_ref,
+    type: e.type,
+  }));
+
+  const allIds = evidence.map((e) => e.id);
+  const citationMap = buildCitationMap(allIds, evidenceRecords);
+
+  let totalChars = 0;
+  let documentOnly = 0;
+  const claimsOnly = 0;
+  const both = 0;
+
+  for (const e of evidence) {
+    totalChars += (e.summary?.length ?? 0) + (e.title?.length ?? 0);
+    documentOnly++;
+  }
+
+  const sources = Array.from(citationMap.values())
+    .sort((a, b) => a.number - b.number)
+    .map((c) => ({
+      number: c.number,
+      title: c.title,
+      url: c.url,
+      sourceType: c.sourceType,
+    }));
+
+  const syncedAgo = "run /assay-sync-status for details";
+
+  const warnings: string[] = [];
+  const missingUrls = evidence.filter((e) => !e.source_ref).length;
+  if (missingUrls > 0) {
+    warnings.push(`${missingUrls} record(s) have no source URL — citations will lack hyperlinks.`);
+  }
+
+  const meta: RetrievalMeta = {
+    totalRecords: evidence.length,
+    totalChars,
+    syncedAgo,
+    documentOnly,
+    claimsOnly,
+    both,
+    sources,
+    warnings,
+  };
+
+  return buildRetrievalArtifact(meta);
+}
+
+/**
+ * Build a multi-block content array from a BriefingResult.
+ * Each evidence record is its own content block so Claude Code can
+ * read them individually when the total exceeds token limits.
+ */
+function buildMultiBlockResponse(
+  header: string,
+  result: BriefingResult,
+): Array<{ type: string; text: string }> {
+  const blocks: Array<{ type: string; text: string }> = [];
+
+  // Block 1: header + system prompt
+  blocks.push({
+    type: "text",
+    text: [header, "", "---", "", result.systemPrompt, "", "---", ""].join("\n"),
+  });
+
+  // Blocks 2..N+1: one per evidence record (from userContent, split by record marker)
+  // Each record starts with "- [uuid]" in the serialized payload
+  const recordChunks = result.userContent.split(/(?=^- \[[a-f0-9-]{36}\])/m);
+  for (const chunk of recordChunks) {
+    const trimmed = chunk.trim();
+    if (!trimmed) continue;
+    blocks.push({ type: "text", text: trimmed });
+  }
+
+  // Last block: retrieval artifact footer
+  const footer = buildRetrievalFooter(result);
+  blocks.push({ type: "text", text: "---\n\n" + footer });
+
+  return blocks;
+}
+
 // ─── retrieve mode=brief ─────────────────────────────────────────
 
 async function handleBrief(args: Record<string, unknown>) {
@@ -462,16 +558,10 @@ async function handleBrief(args: Record<string, unknown>) {
       depth,
     });
 
+    // Return multi-block: system prompt, each evidence record, retrieval footer
+    const header = `**[BRIEF MODE]** ${result.evidence_count} evidence records retrieved (depth: ${result.depth ?? "standard"})`;
     return {
-      content: [{
-        type: "text",
-        text: JSON.stringify({
-          mode: "brief",
-          depth,
-          evidence_count: result.evidence_count,
-          ...result.result,
-        }, null, 2),
-      }],
+      content: buildMultiBlockResponse(header, result),
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";
@@ -490,23 +580,16 @@ async function handleScan(args: Record<string, unknown>) {
 
     const productId = (args.product_id as string | undefined) || process.env.PRODUCT_ID || undefined;
 
-    // Scan uses a quick brief retrieval to get fast signals
     const result = await runBriefing({
       text: intent,
-      mode: "brief",
+      mode: "scan",
       product_id: productId,
-      depth: "quick",
     });
 
+    // Return multi-block: system prompt, each evidence record, retrieval footer
+    const header = `**[SCAN MODE]** ${result.evidence_count} evidence records retrieved`;
     return {
-      content: [{
-        type: "text",
-        text: JSON.stringify({
-          mode: "scan",
-          evidence_count: result.evidence_count,
-          ...result.result,
-        }, null, 2),
-      }],
+      content: buildMultiBlockResponse(header, result),
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";
@@ -531,15 +614,10 @@ async function handleStressTest(args: Record<string, unknown>) {
       product_id: productId,
     });
 
+    // Return multi-block: system prompt, each evidence record, retrieval footer
+    const header = `**[STRESS TEST MODE]** ${result.evidence_count} evidence records retrieved`;
     return {
-      content: [{
-        type: "text",
-        text: JSON.stringify({
-          mode: "stress_test",
-          evidence_count: result.evidence_count,
-          ...result.result,
-        }, null, 2),
-      }],
+      content: buildMultiBlockResponse(header, result),
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";
