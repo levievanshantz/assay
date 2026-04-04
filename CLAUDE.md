@@ -24,12 +24,16 @@ This repo is the **MCP-only extraction** of `intelligence-ledger-prototype` (ILP
 
 ## MCP Tools (4 registered — v2 surface)
 
-| Tool | Description |
-|------|-------------|
-| `retrieve` | Hybrid search (embedding + RRF). Four modes: `raw` (no LLM, default), `guided` (returns eval instructions for calling LLM), `evaluate` (server-side OpenAI synthesis), `brief` (organizational knowledge synthesis — context summary, prior work, constraints, debates, dependencies). |
-| `scan` | Fast pre-flight check. Returns 3-5 signals (blockers, cautions, support) with clear/caution/blocker verdict. Designed for one-sentence intents. ~3-5s response. |
-| `stress_test` | Deliberate judgment mode — stress-tests a proposal against evidence. Returns overlap/conflict analysis, assumption weaknesses, gaps, verdict, confidence. |
-| `configure` | Unified admin tool with subcommands: `status` (sync health + optional drift analysis), `sync` (trigger Notion workspace sync), `sources` (connected sources + corpus stats), `search` (show/update retrieval settings), `extraction` (show/update model settings), `health` (system connectivity check). |
+| Tool | Description | Default K |
+|------|-------------|-----------|
+| `retrieve` | Hybrid search (embedding + RRF). Four modes: `raw` (no LLM, default), `guided` (returns eval instructions for calling LLM), `evaluate` (server-side OpenAI synthesis), `brief` (organizational knowledge synthesis — context summary, prior work, constraints, debates, dependencies). | 20 (raw/guided/evaluate), depth-dependent for brief (quick=5, standard=15, deep=30) |
+| `scan` | Fast pre-flight check. Returns 3-5 signals (blockers, cautions, support) with clear/caution/blocker verdict. Designed for one-sentence intents. ~3-5s response. | 40 |
+| `stress_test` | Deliberate judgment mode — stress-tests a proposal against evidence. Returns overlap/conflict analysis, assumption weaknesses, gaps, verdict, confidence. | 80 |
+| `configure` | Unified admin tool with subcommands: `status` (sync health + optional drift analysis), `sync` (trigger Notion workspace sync), `sources` (connected sources + corpus stats), `search` (show/update retrieval settings), `extraction` (show/update model settings), `health` (system connectivity check). | N/A |
+
+### Response Format
+
+Server returns **multi-block responses** — each evidence record is its own content block, enabling per-record citation by the calling LLM. Built by `buildMultiBlockResponse` in `src/index.ts`. A retrieval footer (via `buildRetrievalFooter`) summarizes result count, query time, and search metadata.
 
 ## Database
 
@@ -43,9 +47,10 @@ This repo is the **MCP-only extraction** of `intelligence-ledger-prototype` (ILP
 ## Key Files
 
 ```
-src/index.ts              — MCP server entry point, tool registrations + handlers
+src/index.ts              — MCP server entry point, tool registrations + handlers, buildMultiBlockResponse + buildRetrievalFooter
 lib/db.ts                 — PostgreSQL connection (pg Pool)
 lib/embeddings.ts         — OpenAI text-embedding-3-small wrapper
+lib/briefingPrompts.ts    — System prompts for brief, stress_test, and SCAN_SYSTEM_PROMPT
 lib/briefingCore.ts       — Evidence retrieval + prompt assembly for brief/stress_test
 lib/claims.ts             — Claim extraction, embedding, hybrid search
 lib/storage.ts            — Evidence record creation + embedding
@@ -103,11 +108,19 @@ npm run verify
 
 Env files are loaded from `.env.local` then `.env` (relative to project root).
 
+## Test Data
+
+- **Stoic records (935 manual records):** Kept intentionally in the corpus as noise/baseline for retrieval testing. Do not delete or treat as stale data.
+
 ## Constraints
 
 - **ANTHROPIC_API_KEY is off-limits in scripts** — no direct SDK calls in automation
 - Changes here affect all users of the MCP server — test locally first
 - Schema changes originate in ILP, not here
+
+## Latest Commit
+
+- `3074a6a` — Multi-block responses, scan K=40, stress_test K=80, SCAN_SYSTEM_PROMPT
 
 ## Daily Export Protocol
 <!-- ORCHESTRATOR-MANAGED — Do not remove this section. Injected by the global orchestrator instance. -->
