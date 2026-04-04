@@ -1,9 +1,9 @@
 /**
  * PRD 13 — Briefing-First Evaluation Core
  *
- * Shared retrieval pipeline for brief and stress_test modes.
- * Uses the same hybrid search (vector + FTS + RRF) as evaluateProposal(),
- * but synthesizes with mode-specific prompts instead of the verdict prompt.
+ * Shared retrieval pipeline for brief, scan, and stress_test modes.
+ * Uses the same hybrid search (vector + FTS + RRF) as evaluateProposal().
+ * Returns evidence + prompt material for the calling LLM to synthesize.
  */
 
 import { embedTexts, hybridClaimSearch, hybridEvidenceSearch } from "./claims";
@@ -15,6 +15,7 @@ import {
   STRESS_TEST_SYSTEM_PROMPT,
   buildBriefingPayload,
 } from "./briefingPrompts";
+import { inferAuthority, inferCustomerVsInternal, batchFetchClaims } from "./evidenceEnrichment";
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -41,8 +42,12 @@ export interface BriefingResult {
     summary: string;
     source_ref: string | null;
     state: string;
+    source_date?: string | null;
+    source_type?: string;
+    authority?: string;
+    customer_vs_internal?: string;
+    claims?: Array<{ claim_text: string; claim_type: string; stance: string; stance_signal: number | null; claim_layer: string; claim_origin: string | null; extraction_confidence: string | null; source_excerpt: string | null }> | null;
   }>;
-  result: Record<string, unknown>;
   evidence_count: number;
   depth?: BriefDepth;
 }
@@ -66,27 +71,6 @@ function truncateForPrompt(content: string, maxChars: number = 3200): string {
     : truncated + "... [truncated]";
 }
 
-function tryParseJSON(text: string): unknown {
-  const cleaned = text
-    .replace(/^```json?\s*/i, "")
-    .replace(/```\s*$/i, "")
-    .trim();
-
-  try {
-    return JSON.parse(cleaned);
-  } catch {
-    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      try {
-        return JSON.parse(jsonMatch[0]);
-      } catch {
-        return null;
-      }
-    }
-    return null;
-  }
-}
-
 // ─── Core Pipeline ───────────────────────────────────────────────
 
 /**
@@ -96,6 +80,9 @@ function tryParseJSON(text: string): unknown {
 export async function runBriefing(input: BriefingInput): Promise<BriefingResult> {
   const { text, mode, product_id } = input;
   const depth = input.depth ?? "standard";
+  // Top-K: how many evidence records end up in the context window after RRF merge.
+  // Scan=40, stress_test=80, brief=depth-dependent.
+  // TODO: make scan/stress_test K configurable via provider_settings
   const topK = mode === "brief" ? DEPTH_TO_TOP_K[depth] : mode === "scan" ? 40 : 80;
 
   // ── 1. Embed query ──
@@ -109,6 +96,11 @@ export async function runBriefing(input: BriefingInput): Promise<BriefingResult>
     summary: string;
     source_ref: string | null;
     state: string;
+    source_date: string | null;
+    source_type: string;
+    authority: string;
+    customer_vs_internal: string;
+    claims: Array<{ claim_text: string; claim_type: string; stance: string; stance_signal: number | null; claim_layer: string; claim_origin: string | null; extraction_confidence: string | null; source_excerpt: string | null }> | null;
   }> = [];
 
   try {
@@ -132,18 +124,23 @@ export async function runBriefing(input: BriefingInput): Promise<BriefingResult>
       }),
     ]);
 
-    // Merge evidence IDs from both sources
-    const evidenceIds = new Set<string>();
+    // Merge evidence IDs with RRF scores preserved for ranking
+    const scoreMap = new Map<string, number>();
     for (const cr of claimResults) {
-      if (cr.claim.source_id) evidenceIds.add(cr.claim.source_id);
+      if (cr.claim.source_id) {
+        const prev = scoreMap.get(cr.claim.source_id) ?? 0;
+        scoreMap.set(cr.claim.source_id, prev + (cr.rrf_score ?? 0));
+      }
     }
     for (const er of evidenceResults) {
-      evidenceIds.add(er.id);
+      const prev = scoreMap.get(er.id) ?? 0;
+      scoreMap.set(er.id, prev + ((er as Record<string, unknown>).rrf_score as number ?? 0));
     }
+    const evidenceIds = new Set<string>(scoreMap.keys());
 
     if (evidenceIds.size > 0) {
       const { rows: fullEvidence } = await query(
-        `SELECT id, title, summary, content, source_ref, state, type
+        `SELECT id, title, summary, content, source_ref, state, type, source_date, source_type
          FROM evidence_records WHERE id = ANY($1) AND is_enabled = true`,
         [Array.from(evidenceIds)]
       );
@@ -157,9 +154,25 @@ export async function runBriefing(input: BriefingInput): Promise<BriefingResult>
           : (er.summary as string) || "",
         source_ref: er.source_ref as string | null,
         state: er.state as string,
+        source_date: (er.source_date as string) ?? null,
+        source_type: (er.source_type as string) ?? "unknown",
+        authority: inferAuthority(er.type as string, er.title as string),
+        customer_vs_internal: inferCustomerVsInternal(er.type as string, er.title as string),
+        claims: null,
       }));
 
-      // Apply top-K cap
+      // Enrich evidence with claims
+      const enrichIds = allEvidence.map(e => e.id);
+      const claimsMap = await batchFetchClaims(enrichIds);
+      allEvidence = allEvidence.map(e => ({
+        ...e,
+        claims: claimsMap.get(e.id) ?? null,
+      }));
+
+      // Sort by RRF score (highest first)
+      allEvidence.sort((a, b) => (scoreMap.get(b.id) ?? 0) - (scoreMap.get(a.id) ?? 0));
+
+      // Cap at top-K
       if (allEvidence.length > topK) {
         allEvidence = allEvidence.slice(0, topK);
       }
@@ -202,7 +215,7 @@ export async function runBriefing(input: BriefingInput): Promise<BriefingResult>
       const limitIdx = paramIdx;
 
       const { rows } = await query(
-        `SELECT id, type, title, summary, source_ref, state FROM evidence_records WHERE ${productFilter}is_enabled = true AND (${likeConditions.join(" OR ")}) LIMIT $${limitIdx}`,
+        `SELECT id, type, title, summary, source_ref, state, source_date, source_type FROM evidence_records WHERE ${productFilter}is_enabled = true AND (${likeConditions.join(" OR ")}) LIMIT $${limitIdx}`,
         params
       );
 
@@ -213,77 +226,33 @@ export async function runBriefing(input: BriefingInput): Promise<BriefingResult>
         summary: (r.summary as string) || "",
         source_ref: r.source_ref as string | null,
         state: r.state as string,
+        source_date: (r.source_date as string) ?? null,
+        source_type: (r.source_type as string) ?? "unknown",
+        authority: inferAuthority(r.type as string, r.title as string),
+        customer_vs_internal: inferCustomerVsInternal(r.type as string, r.title as string),
+        claims: null,
+      }));
+
+      // Enrich fallback evidence with claims
+      const fallbackIds = allEvidence.map(e => e.id);
+      const fallbackClaimsMap = await batchFetchClaims(fallbackIds);
+      allEvidence = allEvidence.map(e => ({
+        ...e,
+        claims: fallbackClaimsMap.get(e.id) ?? null,
       }));
     }
   }
 
-  // ── 4. LLM synthesis ──
+  // ── 4. Return evidence + prompt material ──
+  // The calling LLM (Claude Code / Cursor) does synthesis
   const systemPrompt = mode === "brief" ? BRIEF_SYSTEM_PROMPT : mode === "scan" ? SCAN_SYSTEM_PROMPT : STRESS_TEST_SYSTEM_PROMPT;
   const userContent = buildBriefingPayload(text, allEvidence, mode);
-
-  // Get provider settings for the LLM call
-  const { rows: settingsRows } = await query(
-    "SELECT provider, model, api_key_hash FROM provider_settings LIMIT 1"
-  );
-  const settings = settingsRows[0];
-  if (!settings?.api_key_hash) {
-    throw new Error("No API key configured. Go to Settings to add your API key.");
-  }
-
-  // Use Anthropic SDK for LLM call (same pattern as llmClient.ts)
-  const Anthropic = (await import("@anthropic-ai/sdk")).default;
-  const client = new Anthropic({ apiKey: settings.api_key_hash });
-
-  const MAX_RETRIES = 2;
-  let response;
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      response = await client.messages.create({
-        model: settings.model || "claude-sonnet-4-20250514",
-        max_tokens: 4096,
-        system: systemPrompt,
-        messages: [{ role: "user", content: userContent }],
-      });
-      break;
-    } catch (err: unknown) {
-      const error = err as { status?: number; error?: { type?: string; error?: { type?: string } } };
-      const isRetryable =
-        error?.status === 529 ||
-        error?.status === 429 ||
-        error?.error?.type === "overloaded_error" ||
-        error?.error?.error?.type === "overloaded_error";
-      if (isRetryable && attempt < MAX_RETRIES) {
-        const delay = (attempt + 1) * 5000;
-        await new Promise((r) => setTimeout(r, delay));
-        continue;
-      }
-      if (isRetryable) {
-        throw new Error("The AI service is temporarily at capacity. Please wait and try again.");
-      }
-      throw err;
-    }
-  }
-
-  if (!response) {
-    throw new Error("Failed to get a response from the AI service after retries.");
-  }
-
-  const textBlock = response.content.find((b) => b.type === "text");
-  if (!textBlock || textBlock.type !== "text") {
-    throw new Error("No text response from AI service.");
-  }
-
-  const parsed = tryParseJSON(textBlock.text);
-  if (!parsed || typeof parsed !== "object") {
-    throw new Error("Could not parse briefing response as JSON. Please try again.");
-  }
 
   return {
     mode,
     systemPrompt,
     userContent,
     evidence: allEvidence,
-    result: parsed as Record<string, unknown>,
     evidence_count: allEvidence.length,
     ...(mode === "brief" ? { depth } : {}),
   };
