@@ -385,6 +385,8 @@ export interface EvidenceSearchResult {
   recorded_at: string;
   source_date: string | null;
   is_enabled: boolean;
+  source_created_at: string | null;
+  source_updated_at: string | null;
   vector_score: number;
   fts_score: number;
   rrf_score: number;
@@ -442,8 +444,8 @@ export async function hybridEvidenceSearch(
   // Run both in parallel
   const [vectorRes, ftsRes] = await Promise.all([vectorPromise, ftsPromise]);
 
-  type VectorRow = { id: string; similarity: number; type: string; product_id: string; project_id: string | null; title: string; summary: string; source_ref: string | null; state: string; recorded_at: string; source_date: string | null; is_enabled: boolean };
-  type FtsRow = { id: string; rank: number; type: string; product_id: string; project_id: string | null; title: string; summary: string; source_ref: string | null; state: string; recorded_at: string; source_date: string | null; is_enabled: boolean };
+  type VectorRow = { id: string; similarity: number; type: string; product_id: string; project_id: string | null; title: string; summary: string; source_ref: string | null; state: string; recorded_at: string; source_date: string | null; is_enabled: boolean; source_created_at: string | null; source_updated_at: string | null };
+  type FtsRow = { id: string; rank: number; type: string; product_id: string; project_id: string | null; title: string; summary: string; source_ref: string | null; state: string; recorded_at: string; source_date: string | null; is_enabled: boolean; source_created_at: string | null; source_updated_at: string | null };
 
   const vectorResults: VectorRow[] = vectorRes.rows ?? [];
   const ftsResults: FtsRow[] = ftsRes.rows ?? [];
@@ -471,6 +473,8 @@ export async function hybridEvidenceSearch(
         recorded_at: r.recorded_at,
         source_date: r.source_date ?? null,
         is_enabled: r.is_enabled ?? true,
+        source_created_at: r.source_created_at ?? null,
+        source_updated_at: r.source_updated_at ?? null,
         vector_score: r.similarity,
         fts_score: 0,
         rrf_score: rrfContrib,
@@ -497,6 +501,8 @@ export async function hybridEvidenceSearch(
         recorded_at: r.recorded_at,
         source_date: r.source_date ?? null,
         is_enabled: r.is_enabled ?? true,
+        source_created_at: r.source_created_at ?? null,
+        source_updated_at: r.source_updated_at ?? null,
         vector_score: 0,
         fts_score: r.rank,
         rrf_score: rrfContrib,
@@ -575,6 +581,7 @@ export async function hybridClaimSearch(
     duplicate_of_claim_id: string | null;
     product_id: string | null; project_id: string | null;
     embedding_model: string; freshness_state: string; created_at: string;
+    claim_origin: string | null; extraction_confidence: string | null;
     similarity?: number; rank?: number;
   };
 
@@ -600,7 +607,7 @@ export async function hybridClaimSearch(
     durability_class: "working" as DurabilityClass,
     source_kind: r.source_kind,
     duplicate_of_claim_id: r.duplicate_of_claim_id,
-    claim_origin: (r as any).claim_origin ?? null,
+    claim_origin: r.claim_origin as ClaimOrigin ?? null,
     stance_signal: (r as any).stance_signal ?? null,
     product_id: r.product_id,
     project_id: r.project_id,
