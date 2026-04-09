@@ -1076,7 +1076,7 @@ async function handleConfigureSearch(args: Record<string, unknown>) {
       }
 
       await query(
-        "UPDATE provider_settings SET retrieval_config = $1",
+        "UPDATE provider_settings SET retrieval_config = $1 WHERE id = (SELECT id FROM provider_settings LIMIT 1)",
         [JSON.stringify(updatedConfig)]
       );
 
@@ -1144,7 +1144,7 @@ async function handleConfigureExtraction(args: Record<string, unknown>) {
     // If extraction model provided, update it
     if (args.model !== undefined) {
       const newModel = args.model as string;
-      await query("UPDATE provider_settings SET model = $1", [newModel]);
+      await query("UPDATE provider_settings SET model = $1 WHERE id = (SELECT id FROM provider_settings LIMIT 1)", [newModel]);
 
       return {
         content: [{
@@ -1171,7 +1171,7 @@ async function handleConfigureExtraction(args: Record<string, unknown>) {
     if (args.briefing_model !== undefined) {
       const newBriefingModel = args.briefing_model as string;
       const updatedConfig = { ...retrievalConfig, briefing_model: newBriefingModel };
-      await query("UPDATE provider_settings SET retrieval_config = $1", [JSON.stringify(updatedConfig)]);
+      await query("UPDATE provider_settings SET retrieval_config = $1 WHERE id = (SELECT id FROM provider_settings LIMIT 1)", [JSON.stringify(updatedConfig)]);
 
       return {
         content: [{
@@ -1208,7 +1208,7 @@ async function handleConfigureExtraction(args: Record<string, unknown>) {
         updatedConfig.embedding_model_large = next;
       }
 
-      await query("UPDATE provider_settings SET retrieval_config = $1", [JSON.stringify(updatedConfig)]);
+      await query("UPDATE provider_settings SET retrieval_config = $1 WHERE id = (SELECT id FROM provider_settings LIMIT 1)", [JSON.stringify(updatedConfig)]);
 
       return {
         content: [{
