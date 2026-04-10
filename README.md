@@ -4,7 +4,7 @@ Give your product team a memory that doesn't forget.
 
 Assay is an MCP server that gives AI coding agents persistent institutional knowledge. It extracts structured claims from your product docs, indexes them alongside raw evidence, and surfaces cited context when you need it.
 
-**Built by [Assaylabs](https://assaylabs.com)**
+**Built by [AssayLabs](https://assaylabs.com)**
 
 ---
 
@@ -222,4 +222,4 @@ When the project grows, these should split out:
 
 ## License
 
-MIT -- Assaylabs
+MIT -- AssayLabs
