@@ -57,15 +57,9 @@ lib/storage.ts            — Evidence record creation + embedding
 lib/ingestionPipeline.ts  — Content hashing, dedup, ingestion orchestration
 lib/notionClient.ts       — Notion API: fetch blocks, parse, chunk at headings
 lib/notionSync.ts         — Sync pipeline for tracked Notion pages
-lib/confluenceClient.ts   — Confluence API: fetch + parse ADF/HTML
 lib/config.ts             — Runtime config loader
 lib/logger.ts             — Structured logging with session tracking
 lib/sanitize.ts           — Input sanitization
-lib/extractionRouter.ts   — Routes claim extraction (Ollama vs subagent)
-lib/ollamaClient.ts       — Local Ollama (Phi-4) for claim extraction
-lib/llmClient.ts          — LLM client abstraction
-lib/accumulationLoop.ts   — Evaluation deposit pipeline
-lib/evaluationCore.ts     — Evaluation logic
 scripts/setup-db.mjs      — Database + extension setup
 scripts/verify-setup.mjs  — Setup verification
 scripts/seed-demo.mjs     — Demo data seeder

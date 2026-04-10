@@ -88,7 +88,7 @@ node scripts/notion-ingest.mjs --latest
 |------|------|---------|-------|
 | `ollama` (default) | Free | 83.1% | Requires Ollama + `ollama pull phi4:14b` |
 | `anthropic` | ~$0.003/section | 93.8% | Set `ANTHROPIC_API_KEY` in `.env.local` |
-| `subagent` | Subscription | ~93.8% | Requires Claude Code |
+| `subagent` | Subscription | ~93.8% | Requires Claude Code (experimental) |
 
 Set via `.env.local`:
 
@@ -174,11 +174,9 @@ Notion --> crawl --> ingest --> PostgreSQL + pgvector
                                       |
 Claude Code ----> MCP Server (stdio) ----> 4-layer RRF retrieval
                                                 |
-                                          LLM synthesis (Anthropic)
+                                          Calling LLM synthesizes
                                                 |
                                           Structured JSON + citations
-                                                |
-                                          Accumulation loop (deposits back)
 ```
 
 ---
