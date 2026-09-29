@@ -22,14 +22,14 @@
   pending="null"
 
   if [ -r "$CM_DB" ]; then
-    v=$(sqlite3 -cmd ".timeout 2000" "file:${CM_DB}?mode=ro" \
+    v=$(sqlite3 -cmd ".timeout 2000" -cmd "PRAGMA query_only=1" "file:${CM_DB}?mode=rw" \
           "SELECT MAX(id) FROM observations;" 2>/dev/null || echo "")
     case "$v" in
       ''|*[!0-9]*) cm_max_id="null" ;;
       *) cm_max_id="$v" ;;
     esac
 
-    p=$(sqlite3 -cmd ".timeout 2000" "file:${CM_DB}?mode=ro" \
+    p=$(sqlite3 -cmd ".timeout 2000" -cmd "PRAGMA query_only=1" "file:${CM_DB}?mode=rw" \
           "SELECT COUNT(*) FROM pending_messages;" 2>/dev/null || echo "")
     case "$p" in
       ''|*[!0-9]*) pending="null" ;;

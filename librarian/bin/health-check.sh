@@ -18,7 +18,7 @@ now_s=$(date +%s)
 q() {
   local db="$1"; shift
   [ -f "$db" ] || { printf ''; return; }
-  sqlite3 -cmd ".timeout 5000" "file:${db}?mode=ro" "$*" 2>/dev/null || printf ''
+  sqlite3 -cmd ".timeout 5000" -cmd "PRAGMA query_only=1" "file:${db}?mode=rw" "$*" 2>/dev/null || printf ''
 }
 
 # True only if the argument is a non-empty run of decimal digits. Any value that gets fed into

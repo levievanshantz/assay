@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Pre-existing style in an audited ops script; behavior changes only. pylint: disable=invalid-name,missing-function-docstring,unspecified-encoding
 """precision-sample.py — draw a reproducible sample of filing decisions to audit.
 
 Coverage (every item has a disposition) and precision (the disposition is CORRECT)
@@ -34,7 +35,8 @@ SUBSTRATE = os.path.join(HOME, ".claude-mem", "claude-mem.db")
 def ro(path):
     if not os.path.exists(path):
         sys.exit(f"database not found: {path}")
-    conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    conn = sqlite3.connect(f"file:{path}?mode=rw", uri=True)
+    conn.execute("PRAGMA query_only=1")
     conn.execute("PRAGMA busy_timeout=5000")
     return conn
 

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Pre-existing style in an audited ops script; behavior changes only. pylint: disable=consider-using-with,f-string-without-interpolation,inconsistent-return-statements,invalid-name,line-too-long,missing-function-docstring,too-many-locals,too-many-statements,unspecified-encoding
 """init-journal.py — create the journal and decision drain for a fresh install.
 
 Idempotent by refusal: if ~/.assay/librarian.db already exists this script stops
@@ -126,7 +127,8 @@ def inspect_drain():
     if not os.path.exists(DRAIN):
         return "absent", []
     try:
-        db = sqlite3.connect(f"file:{DRAIN}?mode=ro", uri=True)
+        db = sqlite3.connect(f"file:{DRAIN}?mode=rw", uri=True)
+        db.execute("PRAGMA query_only=1")
         db.execute("PRAGMA busy_timeout=5000")
         have = {r[1] for r in db.execute("PRAGMA table_info(decisions)")}
         db.close()
@@ -208,7 +210,8 @@ def main():
              "  Install the claude-mem plugin first and run at least one Claude Code\n"
              "  session so it creates its database — that is the capture substrate\n"
              "  this whole system files from. See SETUP.md step 1.")
-    cm = sqlite3.connect(f"file:{CM_DB}?mode=ro", uri=True)
+    cm = sqlite3.connect(f"file:{CM_DB}?mode=rw", uri=True)
+    cm.execute("PRAGMA query_only=1")
     cm.execute("PRAGMA busy_timeout=5000")
     try:
         cols = {r[1] for r in cm.execute("PRAGMA table_info(observations)")}

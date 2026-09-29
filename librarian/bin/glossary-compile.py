@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Pre-existing style in an audited ops script; behavior changes only. pylint: disable=broad-exception-caught,consider-using-f-string,invalid-name,line-too-long,missing-function-docstring
 """glossary-compile.py — compile the Decision-State Glossary from the librarian journal.
 
 Reads authorities + open-flag counts from ~/.assay/librarian.db (READ-ONLY) and
@@ -75,9 +76,10 @@ def log(msg):
 
 def load_authorities():
     """Return list of authority dicts with evidence + open-flag counts, read-only."""
-    uri = "file:{}?mode=ro".format(DB_PATH)
+    uri = "file:{}?mode=rw".format(DB_PATH)
     con = sqlite3.connect(uri, uri=True, timeout=5.0)
     try:
+        con.execute("PRAGMA query_only=1")
         con.execute("PRAGMA busy_timeout=5000")
         # Evidence counts and open-flag counts joined onto each authority.
         rows = con.execute(

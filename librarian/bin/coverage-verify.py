@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Pre-existing style in an audited ops script; behavior changes only. pylint: disable=broad-exception-caught,invalid-name,line-too-long,missing-function-docstring,too-many-branches,too-many-locals,too-many-return-statements,too-many-statements
 """coverage-verify.py — post-run disposition audit for the librarian sweep.
 
 THE INVARIANT THIS ENFORCES (added 2026-07-08 after the non-atomic watermark bug was
@@ -76,7 +77,8 @@ def main(argv):
     total_obs, total_drain = len(observations), len(drain)
 
     try:
-        conn = sqlite3.connect(f"file:{journal}?mode=ro", uri=True)
+        conn = sqlite3.connect(f"file:{journal}?mode=rw", uri=True)
+        conn.execute("PRAGMA query_only=1")
         conn.execute("PRAGMA busy_timeout=5000")
     except Exception as e:
         print(stat_line(0, 0, total_obs, total_drain, error=f"journal-open:{e}"))

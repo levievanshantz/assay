@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Pre-existing style in an audited ops script; behavior changes only. pylint: disable=broad-exception-caught,line-too-long,missing-function-docstring,too-many-locals,too-many-return-statements,too-many-statements
 """prefilter.py — deterministic, conservative auto-filer for the librarian sweep.
 
 Tiered filing (v1): before a batch is handed to the expensive LLM librarian, resolve the
@@ -99,8 +100,9 @@ def distinctive_tokens(name):
 
 def load_journal():
     """Read authorities (id -> name, kind, distinctive token set) and aliases (read-only)."""
-    conn = sqlite3.connect(f"file:{JOURNAL}?mode=ro", uri=True)
+    conn = sqlite3.connect(f"file:{JOURNAL}?mode=rw", uri=True)
     try:
+        conn.execute("PRAGMA query_only=1")
         conn.execute("PRAGMA busy_timeout=5000")
         authorities = {}
         for aid, name, kind in conn.execute("SELECT id, name, kind FROM authorities"):

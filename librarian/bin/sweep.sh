@@ -121,7 +121,10 @@ acquire_lock() {
 # Run a read-only, timeout-bounded scalar query. Echoes result (empty on error).
 roq() { # roq <db> <sql>
   [ -n "$SQLITE" ] || return 1
-  "$SQLITE" -readonly "$1" -cmd ".timeout 5000" "$2" 2>/dev/null
+  # Not -readonly: a read-only open cannot recreate the -shm file of a WAL database whose
+  # writer has closed ("unable to open database file"). mode=rw never creates a missing
+  # file, and query_only makes the connection refuse every write.
+  "$SQLITE" -cmd ".timeout 5000" -cmd "PRAGMA query_only=1" "file:$1?mode=rw" "$2" 2>/dev/null
 }
 
 # True only if the argument is a non-empty run of decimal digits (safe for -eq / SQL interp).
@@ -181,8 +184,8 @@ NEW_DR="$(roq "$DR_DB" "SELECT count(*) FROM decisions WHERE created_at > CAST('
 if [ -z "$NEW_CM" ] || [ -z "$NEW_DR" ]; then
   # Re-run the failed read once with stderr kept, so the log says why it failed.
   CM_ERR=""; DR_ERR=""
-  [ -z "$NEW_CM" ] && CM_ERR="$("$SQLITE" -readonly "$CM_DB" -cmd ".timeout 5000" "SELECT count(*) FROM observations WHERE id > CAST('$CM_WM' AS INTEGER);" 2>&1 >/dev/null | head -1)"
-  [ -z "$NEW_DR" ] && DR_ERR="$("$SQLITE" -readonly "$DR_DB" -cmd ".timeout 5000" "SELECT count(*) FROM decisions WHERE created_at > CAST('$DR_WM' AS INTEGER);" 2>&1 >/dev/null | head -1)"
+  [ -z "$NEW_CM" ] && CM_ERR="$("$SQLITE" -cmd ".timeout 5000" -cmd "PRAGMA query_only=1" "file:$CM_DB?mode=rw" "SELECT count(*) FROM observations WHERE id > CAST('$CM_WM' AS INTEGER);" 2>&1 >/dev/null | head -1)"
+  [ -z "$NEW_DR" ] && DR_ERR="$("$SQLITE" -cmd ".timeout 5000" -cmd "PRAGMA query_only=1" "file:$DR_DB?mode=rw" "SELECT count(*) FROM decisions WHERE created_at > CAST('$DR_WM' AS INTEGER);" 2>&1 >/dev/null | head -1)"
   log "settle: SOURCE READ ERROR (cm='${NEW_CM:-<empty>}' drain='${NEW_DR:-<empty>}' cm_err='${CM_ERR}' drain_err='${DR_ERR}') — possible source-db corruption; deferring, NOT marking swept. Run health-check + integrity_check."
   exit 0
 fi
@@ -236,7 +239,8 @@ cm_wm = int(cm_wm or 0); dr_wm = int(dr_wm or 0)
 cm_snap = int(cm_snap or 0); dr_snap = int(dr_snap or 0); cap = int(cap or 400)
 
 def ro(p):
-    c = sqlite3.connect(f"file:{p}?mode=ro", uri=True)
+    c = sqlite3.connect(f"file:{p}?mode=rw", uri=True)
+    c.execute("PRAGMA query_only=1")
     c.row_factory = sqlite3.Row
     c.execute("PRAGMA busy_timeout=5000")
     return c
