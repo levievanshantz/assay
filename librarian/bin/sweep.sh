@@ -179,7 +179,11 @@ NEW_DR="$(roq "$DR_DB" "SELECT count(*) FROM decisions WHERE created_at > CAST('
 # claude-mem db returned empty here, the :-0 default masked 32 unconsumed rows as
 # "caught up", and sweeps marked themselves swept while blind). Defer loudly instead.
 if [ -z "$NEW_CM" ] || [ -z "$NEW_DR" ]; then
-  log "settle: SOURCE READ ERROR (cm='${NEW_CM:-<empty>}' drain='${NEW_DR:-<empty>}') — possible source-db corruption; deferring, NOT marking swept. Run health-check + integrity_check."
+  # Re-run the failed read once with stderr kept, so the log says why it failed.
+  CM_ERR=""; DR_ERR=""
+  [ -z "$NEW_CM" ] && CM_ERR="$("$SQLITE" -readonly "$CM_DB" -cmd ".timeout 5000" "SELECT count(*) FROM observations WHERE id > CAST('$CM_WM' AS INTEGER);" 2>&1 >/dev/null | head -1)"
+  [ -z "$NEW_DR" ] && DR_ERR="$("$SQLITE" -readonly "$DR_DB" -cmd ".timeout 5000" "SELECT count(*) FROM decisions WHERE created_at > CAST('$DR_WM' AS INTEGER);" 2>&1 >/dev/null | head -1)"
+  log "settle: SOURCE READ ERROR (cm='${NEW_CM:-<empty>}' drain='${NEW_DR:-<empty>}' cm_err='${CM_ERR}' drain_err='${DR_ERR}') — possible source-db corruption; deferring, NOT marking swept. Run health-check + integrity_check."
   exit 0
 fi
 
