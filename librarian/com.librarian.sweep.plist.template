@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<!-- Rendered by install.sh: __LIB_HOME__ and __HOME__ are substituted with real paths.
+     Do not load this template directly. -->
+<dict>
+	<key>Label</key>
+	<string>com.librarian.sweep</string>
+
+	<key>ProgramArguments</key>
+	<array>
+		<string>/bin/bash</string>
+		<string>__LIB_HOME__/bin/sweep.sh</string>
+	</array>
+
+	<!-- Heartbeat: every 20 min, whether or not a tick fired. -->
+	<key>StartInterval</key>
+	<integer>1200</integer>
+
+	<key>RunAtLoad</key>
+	<false/>
+
+	<key>WorkingDirectory</key>
+	<string>__LIB_HOME__</string>
+
+	<!-- Event trigger: fire within seconds of a turn-end tick, not up to 20 min later.
+	     StartInterval stays as the heartbeat; ThrottleInterval stops tick-storms. -->
+	<key>WatchPaths</key>
+	<array>
+		<string>__HOME__/.assay/librarian.tick</string>
+	</array>
+	<key>ThrottleInterval</key>
+	<integer>120</integer>
+
+	<!-- launchd hands agents a minimal PATH; give the sweep the dirs its binaries live in.
+	     sweep.sh also sets these itself, so this is defense-in-depth. -->
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>HOME</key>
+		<string>__HOME__</string>
+		<key>PATH</key>
+		<string>/opt/homebrew/bin:/usr/local/bin:__HOME__/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+	</dict>
+
+	<key>StandardOutPath</key>
+	<string>__LIB_HOME__/logs/launchd.log</string>
+	<key>StandardErrorPath</key>
+	<string>__LIB_HOME__/logs/launchd.log</string>
+</dict>
+</plist>

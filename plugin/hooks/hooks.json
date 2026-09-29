@@ -1,0 +1,20 @@
+{
+  "description": "Assay decision-graph hooks. Parses <assay-decision> tags from agent transcripts and persists to the typed decision graph at ~/.assay/decisions.db.",
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "bash",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/stop-hook.cjs\" || true; echo '{\"continue\":true,\"suppressOutput\":true}'",
+            "timeout": 30
+          }
+        ],
+        "id": "stop:zz-assay-decision-drain",
+        "description": "Drain <assay-decision> tags from transcript and persist to ~/.assay/decisions.db. Lexicographic ordering (zz- prefix) ensures this fires after ECC's session-end and claude-mem's summarize hook."
+      }
+    ]
+  }
+}

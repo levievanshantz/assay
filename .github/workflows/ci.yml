@@ -1,0 +1,117 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-eval:
+    name: Build + tests + smoke + eval (verify mode)
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        node: ['22']
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node ${{ matrix.node }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build TypeScript
+        run: npm run build
+
+      # Includes the check that plugin/scripts/*.cjs match a fresh build of
+      # source. Tests that execute the built bundle skip (with a stated reason)
+      # on runners the vendored better-sqlite3 binary was not built for.
+      - name: Tests (node:test)
+        run: node --test tests/*.test.mjs
+
+      - name: Run integration smoke pack (19 cases)
+        run: node scripts/smoke-v2-integration.mjs
+
+      - name: Run capability eval gate (verify mode only — adversarial requires live worker)
+        run: node evals/run-all.mjs --mode=verify
+
+      - name: Check consistency (tool and capability counts match across surfaces)
+        run: node bin/assay.mjs check-consistency
+
+      - name: Upload eval reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-reports-${{ matrix.os }}-node${{ matrix.node }}
+          path: evals/reports/
+          retention-days: 30
+
+  plugin-bundle:
+    # What a marketplace install gets: plugin/ as committed, run by the user's
+    # own `node`, with no npm install. The vendored better-sqlite3 binary is
+    # darwin-arm64 for Node ABI 127 (Node 22.x), so this is the one platform the
+    # shipped bundle is expected to load on.
+    name: Shipped plugin bundle loads (macOS arm64, Node 22, no npm install)
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Runner matches the vendored binary (darwin, arm64, Node ABI 127)
+        run: |
+          node -e "const ok = process.platform === 'darwin' && process.arch === 'arm64' && process.versions.modules === '127';
+          console.log(process.platform, process.arch, 'node', process.version, 'abi', process.versions.modules);
+          process.exit(ok ? 0 : 1)"
+
+      - name: No root node_modules (the plugin must run from plugin/ alone)
+        run: test ! -d node_modules
+
+      - name: Built bundle tests (require, Stop hook on JSONL, MCP over stdio)
+        env:
+          ASSAY_BUNDLE_TESTS_REQUIRED: '1'
+        run: node --test tests/bundle-require.test.mjs tests/stop-hook-bundle.test.mjs tests/mcp-stdio.test.mjs
+
+  librarian:
+    # macOS only, deliberately: sweep.sh uses BSD `stat -f %m` and `shlock` for its
+    # single-writer lock. Two tests run the real plugin Stop hook, so Node 22 is set up.
+    name: Librarian tests + demo (macOS)
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: librarian
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Show environment
+        run: sw_vers && python3 --version && sqlite3 --version && node --version
+
+      - name: Shell syntax check
+        run: bash -n install.sh && for f in bin/*.sh demo/*.sh; do bash -n "$f"; done
+
+      - name: Unit and regression tests
+        run: python3 -m unittest discover tests -v
+
+      - name: Demo runs end-to-end
+        run: cd demo && ./demo.sh

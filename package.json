@@ -1,0 +1,74 @@
+{
+  "name": "@assaylabs/assay",
+  "version": "2.0.0-alpha.3",
+  "description": "Local memory layer for Claude Code. Captures the decisions you make with an AI agent into SQLite on your machine and recalls them with citations in later sessions.",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "assay": "bin/assay.mjs"
+  },
+  "files": [
+    "bin/",
+    "dist/",
+    "plugin/",
+    "scripts/",
+    "evals/",
+    "LICENSE",
+    "README.md",
+    "USAGE.md",
+    "ARCHITECTURE.md",
+    "CAPABILITIES.md",
+    "ROADMAP.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "build:plugin": "npm run build && node scripts/build-plugin.mjs",
+    "test": "npm run build && node --test tests/*.test.mjs",
+    "smoke": "npm run build && node scripts/smoke-v2-integration.mjs",
+    "demo": "npm run build && node scripts/demo-end-to-end.mjs",
+    "eval": "npm run build && node evals/run-all.mjs",
+    "eval:verify": "npm run build && node evals/run-all.mjs --mode=verify",
+    "eval:adversarial": "npm run build && node evals/run-all.mjs --mode=adversarial",
+    "postinstall": "node scripts/check-claude-mem-version.mjs || true",
+    "test:bundle": "node --test tests/bundle-require.test.mjs tests/stop-hook-bundle.test.mjs tests/mcp-stdio.test.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "better-sqlite3": "11.5.0"
+  },
+  "peerDependencies": {
+    "claude-mem": ">=13.0.0"
+  },
+  "peerDependenciesMeta": {
+    "claude-mem": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "7.6.11",
+    "@types/node": "22.7.4",
+    "esbuild": "^0.24.2",
+    "typescript": "5.6.2"
+  },
+  "engines": {
+    "node": ">=22.0.0 <23.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/levievanshantz/assay.git"
+  },
+  "bugs": {
+    "url": "https://github.com/levievanshantz/assay/issues"
+  },
+  "homepage": "https://github.com/levievanshantz/assay#readme",
+  "keywords": [
+    "claude-code",
+    "mcp",
+    "memory",
+    "decisions",
+    "sqlite",
+    "local-first"
+  ],
+  "license": "MIT"
+}

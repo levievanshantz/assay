@@ -1,0 +1,11 @@
+# Runtime state — never tracked. The real system's logs and databases contain
+# personal data; this repo ships code, docs, and synthetic fixtures only.
+logs/
+*.log
+*.jsonl
+*.db
+*.db-wal
+*.db-shm
+.DS_Store
+__pycache__/
+*.pyc

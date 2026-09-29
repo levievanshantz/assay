@@ -1,0 +1,19 @@
+{
+  "name": "assaylabs",
+  "owner": {
+    "name": "Levi Shantz",
+    "email": "levishantz@gmail.com"
+  },
+  "metadata": {
+    "description": "AssayLabs plugins for Claude Code: Assay, a local memory layer for your decisions",
+    "homepage": "https://github.com/levievanshantz/assay"
+  },
+  "plugins": [
+    {
+      "name": "assay",
+      "version": "2.0.0-alpha.3",
+      "source": "./plugin",
+      "description": "Local memory layer for Claude Code. Captures the decisions you make with an AI agent into SQLite on your machine and recalls them with citations in later sessions."
+    }
+  ]
+}

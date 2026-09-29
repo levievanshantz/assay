@@ -1,0 +1,13 @@
+{
+  "name": "assay",
+  "version": "2.0.0-alpha.3",
+  "description": "Local memory layer for Claude Code. Captures the decisions you make with an AI agent into SQLite on your machine and recalls them with citations in later sessions.",
+  "author": {
+    "name": "Levi Shantz",
+    "email": "levishantz@gmail.com"
+  },
+  "repository": "https://github.com/levievanshantz/assay",
+  "homepage": "https://github.com/levievanshantz/assay#readme",
+  "license": "MIT",
+  "keywords": ["claude-code", "mcp", "memory", "decisions", "sqlite", "local-first"]
+}
